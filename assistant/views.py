@@ -1,11 +1,11 @@
 import google.generativeai as genai
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
 from django.contrib.auth.views import LoginView
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from .forms import UserRegisterForm, UserLoginForm
-from .models import GovService, ChatMessage
+from .models import GovService, ChatMessage, ChatSession
 
 from django.conf import settings
 
@@ -44,14 +44,28 @@ def logout_view(request):
 
 # --- Main chat logic --- 
 @login_required(login_url='login')
-def chat_view(request):
+def chat_view(request, session_id=None):
     if request.method == "POST":
         user_text = request.POST.get('message', '').strip()
+        req_session_id = request.POST.get('session_id')
+        
         if not user_text:
             return JsonResponse({'error': 'Xabar bo\'sh bo\'lishi mumkin emas'}, status=400)
+            
+        if req_session_id:
+            session = get_object_or_404(ChatSession, id=req_session_id, user=request.user)
+        else:
+            title = user_text[:30] + ('...' if len(user_text) > 30 else '')
+            session = ChatSession.objects.create(user=request.user, title=title)
+            
+        # Oldingi xabarlarni API formatiga o'tkazish (yangi xabar saqlanishidan oldin)
+        history_messages = []
+        for msg in session.messages.all().order_by('created_at')[:20]:
+            role = "model" if msg.is_ai else "user"
+            history_messages.append({"role": role, "parts": [msg.message]})
         
         # 1. Foydalanuvchi xabarini bazaga saqlaymiz
-        ChatMessage.objects.create(user=request.user, message=user_text, is_ai=False)
+        ChatMessage.objects.create(session=session, user=request.user, message=user_text, is_ai=False)
         
         # 2. Bazadan mos keluvchi yo'riqnomani qidiramiz
         matched_service = None
@@ -63,37 +77,47 @@ def chat_view(request):
             
         # 3. Prompt (Kontekst) tayyorlash
         if matched_service:
-            context = f"Rasmiy yo'riqnoma:\n{matched_service.instructions}"
+            context = f" [TIZIM XABARI: Quyidagi rasmiy yo'riqnoma topildi. Agar savol bunga oid bo'lsa, qat'iyan shu asosida javob bering:\n{matched_service.instructions}]"
         else:
-            context = "Tizimda bu xizmat haqida aniq yo'riqnoma topilmadi. Foydalanuvchiga faqat my.gov.uz saytiga kirib qidirishni chiroyli tushuntiring."
+            context = ""
             
-        full_prompt = f"""
-        Siz my.gov.uz (Yagona interaktiv davlat xizmatlari portali) bo'yicha rasmiy, professional va malakali davlat xizmatlari maslahatchisisiz.
-        Foydalanuvchiga taqdim etilgan rasmiy yo'riqnoma asosida aniq, tushunarli, va ortiqcha so'zlarsiz javob bering.
-        Javobingiz rasmiy yozishmalar uslubida bo'lishi, ehtiyotkorlik bilan shakllantirilishi va foydalanuvchiga amaliy qadamlarni aniq ko'rsatishi shart.
-        Agar yo'riqnomada aniq havola yoki bo'lim nomi bo'lsa, ularni alohida ajratib ko'rsating.
+        latest_prompt = f"""[TIZIM KO'RSATMASI: Siz my.gov.uz (Yagona interaktiv davlat xizmatlari portali) bo'yicha rasmiy, professional va malakali maslahatchisiz. 
+Javobingiz rasmiy yozishmalar uslubida bo'lishi, qisqa va lo'nda bo'lishi shart.
+Agar savol davlat xizmatlari, hujjatlar yoki oldingi suhbatga aloqador bo'lsa, o'z bilimingiz va oldingi xabarlar asosida yordam bering.{context}]
 
-        Rasmiy ma'lumot:
-        {context}
-
-        Foydalanuvchi so'rovi: {user_text}
-        
-        Iltimos, javobni O'zbek tilida, qisqa va lo'nda qilib, rasmiy ohangda taqdim eting.
-        """
+Foydalanuvchi so'rovi: {user_text}"""
         
         # 4. Gemini API orqali javob olish
         try:
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            response = model.generate_content(full_prompt)
+            chat = model.start_chat(history=history_messages)
+            response = chat.send_message(latest_prompt)
             ai_response = response.text
         except Exception as e:
             ai_response = "Kechirasiz, tizimda xatolik yuz berdi. Birozdan so'ng urinib ko'ring."
 
         # 5. AI javobini bazaga saqlaymiz
-        ChatMessage.objects.create(user=request.user, message=ai_response, is_ai=True)
+        ChatMessage.objects.create(session=session, user=request.user, message=ai_response, is_ai=True)
 
-        return JsonResponse({'response': ai_response})
+        return JsonResponse({'response': ai_response, 'session_id': session.id})
 
-    # Sahifa birinchi marta ochilganda eski xabarlar tarixini yuklaymiz
-    history = ChatMessage.objects.filter(user=request.user)
-    return render(request, 'assistant/chat.html', {'history': history})
+    # GET so'rovi uchun
+    sessions = ChatSession.objects.filter(user=request.user)
+    if session_id:
+        current_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+        history = current_session.messages.all().order_by('created_at')
+    else:
+        current_session = None
+        history = []
+        
+    return render(request, 'assistant/chat.html', {
+        'history': history,
+        'sessions': sessions,
+        'current_session': current_session
+    })
+
+@login_required(login_url='login')
+def delete_chat(request, session_id):
+    session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+    session.delete()
+    return redirect('chat_new')

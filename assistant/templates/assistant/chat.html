@@ -22,80 +22,166 @@
         .markdown-body pre { background-color: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; margin-bottom: 0.5rem; }
         .markdown-body pre code { background-color: transparent; padding: 0; }
         .markdown-body hr { border-color: #e5e7eb; margin: 1rem 0; }
+        
+        /* Custom scrollbar for sidebar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex flex-col">
+<body class="bg-gray-50 h-screen flex overflow-hidden">
 
-    <!-- Yuqori qism (Header) -->
-    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
-        <div class="flex items-center space-x-3">
-            <div class="bg-blue-600 text-white p-2 rounded-xl">
-                <i class="fa-solid fa-robot text-xl"></i>
-            </div>
-            <div>
-                <h1 class="font-bold text-gray-800 text-lg">MyGov Aqlli Yordamchi</h1>
-                <p class="text-xs text-green-500 flex items-center"><span class="h-2 w-2 bg-green-500 rounded-full inline-block mr-1"></span> Online</p>
-            </div>
-        </div>
-        <div class="flex items-center space-x-4">
-            <span class="text-sm text-gray-600 hidden md:inline">{{ request.user.email }}</span>
-            <a href="{% url 'logout' %}" class="text-sm bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-4 py-2 rounded-xl transition font-medium">
-                <i class="fa-solid fa-right-from-bracket mr-1"></i> Chiqish
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-72 bg-gray-900 text-gray-300 flex flex-col flex-shrink-0 transition-transform transform -translate-x-full absolute z-20 h-full md:relative md:translate-x-0">
+        <!-- New Chat Button -->
+        <div class="p-4">
+            <a href="{% url 'chat_new' %}" class="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition-colors border border-gray-700 shadow-sm font-medium">
+                <i class="fa-solid fa-plus text-sm"></i> Yangi suhbat
             </a>
         </div>
-    </header>
+        
+        <!-- Chat History List -->
+        <div class="flex-1 overflow-y-auto px-3 space-y-1">
+            <div class="text-xs text-gray-500 font-semibold px-2 mb-3 mt-2 tracking-wider">SUHBATLAR TARIXI</div>
+            {% for s in sessions %}
+            <div class="group relative flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-800 transition-colors {% if current_session and current_session.id == s.id %}bg-gray-800 text-white{% endif %}">
+                <a href="{% url 'chat_detail' s.id %}" class="flex-1 flex items-center gap-3 truncate mr-2">
+                    <i class="fa-regular fa-message text-sm"></i> 
+                    <span class="truncate text-sm font-medium">{{ s.title }}</span>
+                </a>
+                <a href="{% url 'delete_chat' s.id %}" class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity p-1" title="O'chirish">
+                    <i class="fa-solid fa-trash-can text-sm"></i>
+                </a>
+            </div>
+            {% empty %}
+            <div class="px-5 py-3 text-xs text-gray-500 italic">
+                Hozircha suhbatlar yo'q
+            </div>
+            {% endfor %}
+        </div>
 
-    <!-- Chat Oynasi -->
-    <main class="flex-1 overflow-y-auto p-6 space-y-4" id="chat-container">
-        <!-- Agar eski xabarlar bo'lsa yuklanadi -->
-        {% for chat in history %}
-            <div class="flex {% if chat.is_ai %}justify-start{% else %}justify-end{% endif %} animate-fade-in">
-                <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm {% if chat.is_ai %}bg-white text-gray-800 border border-gray-100 markdown-body{% else %}bg-blue-600 text-white{% endif %}">
-                    {% if chat.is_ai %}
-                    <div class="ai-message-content hidden">{{ chat.message }}</div>
-                    <div class="ai-message-rendered"></div>
-                    {% else %}
-                    <p class="text-sm leading-relaxed whitespace-pre-line">{{ chat.message }}</p>
-                    {% endif %}
-                    <span class="text-[10px] block mt-1 text-right {% if chat.is_ai %}text-gray-400{% else %}text-blue-200{% endif %}">{{ chat.created_at|date:"H:i" }}</span>
+        <!-- User Profile Area -->
+        <div class="p-4 border-t border-gray-800 bg-gray-900">
+            <div class="flex items-center gap-3 px-2">
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                    {{ request.user.email|make_list|first|upper }}
                 </div>
-            </div>
-        {% empty %}
-            <!-- Bo'sh holatdagi xabarnoma -->
-            <div id="welcome-box" class="text-center py-20 max-w-md mx-auto space-y-3">
-                <i class="fa-solid fa-comments text-5xl text-blue-200"></i>
-                <h3 class="text-xl font-bold text-gray-700">Sizga qanday yordam bera olaman?</h3>
-                <p class="text-sm text-gray-500">Menga o'zingizga kerakli davlat xizmatini yozing. Masalan: "Tug'ilganlik haqida guvohnoma kerak".</p>
-            </div>
-        {% endfor %}
-        <div id="typing-indicator" class="hidden flex justify-start">
-            <div class="bg-white border border-gray-100 text-gray-500 rounded-2xl px-4 py-3 shadow-sm flex items-center space-x-1">
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                <div class="flex-1 truncate text-sm font-medium text-white">
+                    {{ request.user.email }}
+                </div>
+                <a href="{% url 'logout' %}" class="text-gray-500 hover:text-white transition-colors" title="Chiqish">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </a>
             </div>
         </div>
-    </main>
+    </aside>
 
-    <!-- Xabar yuborish qismi (Footer Input) -->
-    <footer class="bg-white border-t border-gray-200 p-4">
-        <form id="chat-form" class="max-w-4xl mx-auto flex items-center space-x-3">
-            {% csrf_token %}
-            <input type="text" id="user-input" placeholder="Savolingizni shu yerga yozing..." autocomplete="off"
-                   class="flex-1 border border-gray-200 rounded-2xl px-5 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-inner bg-gray-50">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white p-3.5 rounded-2xl transition shadow-md flex items-center justify-center cursor-pointer">
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
-        </form>
-    </footer>
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-10 hidden md:hidden"></div>
 
-    <!-- JavaScript orqali AJAX so'rovlari -->
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col h-full relative w-full">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10">
+            <div class="flex items-center gap-4">
+                <button id="mobile-menu-btn" class="md:hidden text-gray-500 hover:text-gray-900 transition-colors">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white w-10 h-10 flex items-center justify-center rounded-xl shadow-sm">
+                        <i class="fa-solid fa-robot text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-gray-800 text-lg leading-tight">MyGov Aqlli Yordamchi</h1>
+                        <p class="text-xs text-green-500 flex items-center font-medium"><span class="h-2 w-2 bg-green-500 rounded-full inline-block mr-1"></span> Online</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Chat Container -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6" id="chat-container">
+            {% for chat in history %}
+                <div class="flex {% if chat.is_ai %}justify-start{% else %}justify-end{% endif %} animate-fade-in">
+                    <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 shadow-sm {% if chat.is_ai %}bg-white text-gray-800 border border-gray-100 markdown-body{% else %}bg-blue-600 text-white{% endif %}">
+                        {% if chat.is_ai %}
+                        <div class="ai-message-content hidden">{{ chat.message }}</div>
+                        <div class="ai-message-rendered"></div>
+                        {% else %}
+                        <p class="text-[15px] leading-relaxed whitespace-pre-line">{{ chat.message }}</p>
+                        {% endif %}
+                        <span class="text-[10px] block mt-2 text-right {% if chat.is_ai %}text-gray-400{% else %}text-blue-200{% endif %} font-medium">{{ chat.created_at|date:"H:i" }}</span>
+                    </div>
+                </div>
+            {% empty %}
+                <!-- Bo'sh holatdagi xabarnoma -->
+                <div id="welcome-box" class="flex flex-col items-center justify-center h-full max-w-md mx-auto text-center space-y-4 px-4">
+                    <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-2">
+                        <i class="fa-solid fa-comments text-4xl text-blue-300"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800">Sizga qanday yordam bera olaman?</h3>
+                    <p class="text-[15px] text-gray-500 leading-relaxed">Menga o'zingizga kerakli davlat xizmatini yozing. Men sizga rasmiy yo'riqnomani qadam-baqadam tushuntiraman.</p>
+                    
+                    <div class="w-full grid grid-cols-1 gap-3 mt-6 text-left">
+                        <button type="button" onclick="document.getElementById('user-input').value='Tug\'ilganlik haqida guvohnoma qanday olinadi?'; document.getElementById('chat-form').requestSubmit();" class="bg-white border border-gray-200 p-3 rounded-xl text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm text-left">
+                            "Tug'ilganlik haqida guvohnoma qanday olinadi?" &rarr;
+                        </button>
+                        <button type="button" onclick="document.getElementById('user-input').value='Xalqaro passport olish tartibi'; document.getElementById('chat-form').requestSubmit();" class="bg-white border border-gray-200 p-3 rounded-xl text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm text-left">
+                            "Xalqaro passport olish tartibi" &rarr;
+                        </button>
+                    </div>
+                </div>
+            {% endfor %}
+            <div id="typing-indicator" class="hidden flex justify-start">
+                <div class="bg-white border border-gray-100 text-gray-500 rounded-2xl px-5 py-4 shadow-sm flex items-center space-x-2">
+                    <span class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></span>
+                    <span class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                    <span class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Chat Input Footer -->
+        <footer class="bg-white border-t border-gray-200 p-4 md:px-6 md:py-5">
+            <form id="chat-form" class="max-w-4xl mx-auto relative flex items-end gap-3">
+                {% csrf_token %}
+                <input type="hidden" id="session-id" name="session_id" value="{{ current_session.id|default:'' }}">
+                <div class="relative flex-1">
+                    <input type="text" id="user-input" placeholder="Xabar yozing..." autocomplete="off"
+                           class="w-full border border-gray-300 rounded-2xl pl-5 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-[15px] shadow-sm bg-gray-50 transition-all">
+                </div>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white w-12 h-12 rounded-2xl transition-colors shadow-md flex flex-shrink-0 items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+            <div class="text-center mt-2">
+                <span class="text-[11px] text-gray-400">AI ba'zan xato qilishi mumkin. Muhim ma'lumotlarni my.gov.uz dan tekshiring.</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- JavaScript -->
     <script>
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
         const chatContainer = document.getElementById('chat-container');
         const welcomeBox = document.getElementById('welcome-box');
         const typingIndicator = document.getElementById('typing-indicator');
+        const sessionIdInput = document.getElementById('session-id');
+
+        // Mobile Sidebar Toggle
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('-translate-x-full');
+            sidebarOverlay.classList.toggle('hidden');
+        }
+
+        mobileMenuBtn.addEventListener('click', toggleSidebar);
+        sidebarOverlay.addEventListener('click', toggleSidebar);
 
         // Sahifa yuklanganda mavjud xabarlarni Markdown orqali render qilish
         document.querySelectorAll('.ai-message-content').forEach(el => {
@@ -119,13 +205,17 @@
 
             if(welcomeBox) welcomeBox.style.display = 'none';
 
+            // Foydalanuvchi tugmasini vaqtincha bloklash
+            const submitBtn = chatForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+
             // 1. Foydalanuvchi xabarini ekranga chiqarish
             const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const userHtml = `
                 <div class="flex justify-end">
-                    <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm bg-blue-600 text-white">
-                        <p class="text-sm leading-relaxed whitespace-pre-line">${message}</p>
-                        <span class="text-[10px] block mt-1 text-right text-blue-200">${time}</span>
+                    <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 shadow-sm bg-blue-600 text-white">
+                        <p class="text-[15px] leading-relaxed whitespace-pre-line">${message}</p>
+                        <span class="text-[10px] block mt-2 text-right text-blue-200 font-medium">${time}</span>
                     </div>
                 </div>
             `;
@@ -140,25 +230,38 @@
             // 2. Bekkendga so'rov jo'natish
             const formData = new FormData();
             formData.append('message', message);
+            formData.append('session_id', sessionIdInput.value);
             formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
             fetch('', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             })
             .then(res => res.json())
             .then(data => {
                 // Indikatorni o'chirish
                 typingIndicator.classList.add('hidden');
+                submitBtn.disabled = false;
+
+                if(data.session_id && !sessionIdInput.value) {
+                    // Yangi sessiya yaratilgan bo'lsa URLni yangilash
+                    sessionIdInput.value = data.session_id;
+                    window.history.pushState({}, '', '/chat/' + data.session_id + '/');
+                    // Sidebar ni yangilash uchun sahifani reload qilish mumkin, 
+                    // lekin hozircha asosiysi URL o'zgardi.
+                }
 
                 if(data.response) {
                     const parsedResponse = marked.parse(data.response);
                     // 3. AI javobini ekranga chiqarish
                     const aiHtml = `
                         <div class="flex justify-start">
-                            <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm bg-white text-gray-800 border border-gray-100 markdown-body">
+                            <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 shadow-sm bg-white text-gray-800 border border-gray-100 markdown-body">
                                 <div>${parsedResponse}</div>
-                                <span class="text-[10px] block mt-1 text-right text-gray-400">${time}</span>
+                                <span class="text-[10px] block mt-2 text-right text-gray-400 font-medium">${time}</span>
                             </div>
                         </div>
                     `;
@@ -168,7 +271,9 @@
             })
             .catch(err => {
                 typingIndicator.classList.add('hidden');
+                submitBtn.disabled = false;
                 console.error(err);
+                alert("Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
             });
         });
     </script>
