@@ -43,9 +43,11 @@ def logout_view(request):
 
 
 # --- Main chat logic --- 
-@login_required(login_url='login')
 def chat_view(request, session_id=None):
     if request.method == "POST":
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Iltimos, savol berish uchun tizimga kiring yoki ro\'yxatdan o\'ting.', 'redirect': '/login/'}, status=401)
+
         user_text = request.POST.get('message', '').strip()
         req_session_id = request.POST.get('session_id')
         
@@ -98,23 +100,37 @@ Foydalanuvchi so'rovi: {user_text}"""
 
         # 5. AI javobini bazaga saqlaymiz
         ChatMessage.objects.create(session=session, user=request.user, message=ai_response, is_ai=True)
-
-        return JsonResponse({'response': ai_response, 'session_id': session.id})
-
-    # GET so'rovi uchun
-    sessions = ChatSession.objects.filter(user=request.user)
-    if session_id:
-        current_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
-        history = current_session.messages.all().order_by('created_at')
-    else:
+        
+        return JsonResponse({
+            'response': ai_response,
+            'session_id': session.id,
+            'is_new_session': not req_session_id
+        })
+        
+    # GET so'rovlari uchun
+    if request.user.is_authenticated:
+        sessions = ChatSession.objects.filter(user=request.user).order_by('-created_at')
+        
         current_session = None
         history = []
-        
-    return render(request, 'assistant/chat.html', {
-        'history': history,
-        'sessions': sessions,
-        'current_session': current_session
-    })
+        if session_id:
+            current_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+            history = current_session.messages.all().order_by('created_at')
+            
+        return render(request, 'assistant/chat.html', {
+            'sessions': sessions,
+            'current_session': current_session,
+            'history': history,
+        })
+    else:
+        if session_id:
+            return redirect('login')
+            
+        return render(request, 'assistant/chat.html', {
+            'sessions': [],
+            'current_session': None,
+            'history': [],
+        })
 
 @login_required(login_url='login')
 def delete_chat(request, session_id):
