@@ -1,4 +1,5 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
 from django.contrib.auth.views import LoginView
@@ -8,8 +9,6 @@ from .forms import UserRegisterForm, UserLoginForm
 from .models import GovService, ChatMessage, ChatSession
 
 from django.conf import settings
-
-model = genai.GenerativeModel('gemini-3.5-flash')
 
 def register_view(request):
     if request.user.is_authenticated:
@@ -64,7 +63,9 @@ def chat_view(request, session_id=None):
         history_messages = []
         for msg in session.messages.all().order_by('created_at')[:20]:
             role = "model" if msg.is_ai else "user"
-            history_messages.append({"role": role, "parts": [msg.message]})
+            history_messages.append(
+                types.Content(role=role, parts=[types.Part.from_text(text=msg.message)])
+            )
         
         # 1. Foydalanuvchi xabarini bazaga saqlaymiz
         ChatMessage.objects.create(session=session, user=request.user, message=user_text, is_ai=False)
@@ -91,8 +92,8 @@ Foydalanuvchi so'rovi: {user_text}"""
         
         # 4. Gemini API orqali javob olish
         try:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            chat = model.start_chat(history=history_messages)
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            chat = client.chats.create(model='gemini-2.5-flash', history=history_messages)
             response = chat.send_message(latest_prompt)
             ai_response = response.text
         except Exception as e:
