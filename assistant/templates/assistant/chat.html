@@ -1,0 +1,176 @@
+<!-- assistant/templates/assistant/chat.html -->
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyGov Assistant - Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .markdown-body { font-size: 0.875rem; line-height: 1.625; }
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .markdown-body ol { list-style-type: decimal; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .markdown-body strong { font-weight: 600; color: #1f2937; }
+        .markdown-body p { margin-bottom: 0.5rem; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; transition: color 0.2s; }
+        .markdown-body a:hover { color: #1d4ed8; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #111827; }
+        .markdown-body code { background-color: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; }
+        .markdown-body pre { background-color: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .markdown-body pre code { background-color: transparent; padding: 0; }
+        .markdown-body hr { border-color: #e5e7eb; margin: 1rem 0; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col">
+
+    <!-- Yuqori qism (Header) -->
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 text-white p-2 rounded-xl">
+                <i class="fa-solid fa-robot text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-gray-800 text-lg">MyGov Aqlli Yordamchi</h1>
+                <p class="text-xs text-green-500 flex items-center"><span class="h-2 w-2 bg-green-500 rounded-full inline-block mr-1"></span> Online</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-600 hidden md:inline">{{ request.user.email }}</span>
+            <a href="{% url 'logout' %}" class="text-sm bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-4 py-2 rounded-xl transition font-medium">
+                <i class="fa-solid fa-right-from-bracket mr-1"></i> Chiqish
+            </a>
+        </div>
+    </header>
+
+    <!-- Chat Oynasi -->
+    <main class="flex-1 overflow-y-auto p-6 space-y-4" id="chat-container">
+        <!-- Agar eski xabarlar bo'lsa yuklanadi -->
+        {% for chat in history %}
+            <div class="flex {% if chat.is_ai %}justify-start{% else %}justify-end{% endif %} animate-fade-in">
+                <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm {% if chat.is_ai %}bg-white text-gray-800 border border-gray-100 markdown-body{% else %}bg-blue-600 text-white{% endif %}">
+                    {% if chat.is_ai %}
+                    <div class="ai-message-content hidden">{{ chat.message }}</div>
+                    <div class="ai-message-rendered"></div>
+                    {% else %}
+                    <p class="text-sm leading-relaxed whitespace-pre-line">{{ chat.message }}</p>
+                    {% endif %}
+                    <span class="text-[10px] block mt-1 text-right {% if chat.is_ai %}text-gray-400{% else %}text-blue-200{% endif %}">{{ chat.created_at|date:"H:i" }}</span>
+                </div>
+            </div>
+        {% empty %}
+            <!-- Bo'sh holatdagi xabarnoma -->
+            <div id="welcome-box" class="text-center py-20 max-w-md mx-auto space-y-3">
+                <i class="fa-solid fa-comments text-5xl text-blue-200"></i>
+                <h3 class="text-xl font-bold text-gray-700">Sizga qanday yordam bera olaman?</h3>
+                <p class="text-sm text-gray-500">Menga o'zingizga kerakli davlat xizmatini yozing. Masalan: "Tug'ilganlik haqida guvohnoma kerak".</p>
+            </div>
+        {% endfor %}
+        <div id="typing-indicator" class="hidden flex justify-start">
+            <div class="bg-white border border-gray-100 text-gray-500 rounded-2xl px-4 py-3 shadow-sm flex items-center space-x-1">
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Xabar yuborish qismi (Footer Input) -->
+    <footer class="bg-white border-t border-gray-200 p-4">
+        <form id="chat-form" class="max-w-4xl mx-auto flex items-center space-x-3">
+            {% csrf_token %}
+            <input type="text" id="user-input" placeholder="Savolingizni shu yerga yozing..." autocomplete="off"
+                   class="flex-1 border border-gray-200 rounded-2xl px-5 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-inner bg-gray-50">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white p-3.5 rounded-2xl transition shadow-md flex items-center justify-center cursor-pointer">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </form>
+    </footer>
+
+    <!-- JavaScript orqali AJAX so'rovlari -->
+    <script>
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const chatContainer = document.getElementById('chat-container');
+        const welcomeBox = document.getElementById('welcome-box');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // Sahifa yuklanganda mavjud xabarlarni Markdown orqali render qilish
+        document.querySelectorAll('.ai-message-content').forEach(el => {
+            const rawContent = el.textContent;
+            if(rawContent) {
+                const renderedDiv = el.nextElementSibling;
+                renderedDiv.innerHTML = marked.parse(rawContent);
+            }
+        });
+
+        // Chatni doim pastga aylantirib qo'yish
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        scrollToBottom();
+
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if(!message) return;
+
+            if(welcomeBox) welcomeBox.style.display = 'none';
+
+            // 1. Foydalanuvchi xabarini ekranga chiqarish
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const userHtml = `
+                <div class="flex justify-end">
+                    <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm bg-blue-600 text-white">
+                        <p class="text-sm leading-relaxed whitespace-pre-line">${message}</p>
+                        <span class="text-[10px] block mt-1 text-right text-blue-200">${time}</span>
+                    </div>
+                </div>
+            `;
+            chatContainer.insertBefore(document.createRange().createContextualFragment(userHtml), typingIndicator);
+            userInput.value = '';
+            scrollToBottom();
+
+            // Yuklanmoqda indikatorini yoqish
+            typingIndicator.classList.remove('hidden');
+            scrollToBottom();
+
+            // 2. Bekkendga so'rov jo'natish
+            const formData = new FormData();
+            formData.append('message', message);
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Indikatorni o'chirish
+                typingIndicator.classList.add('hidden');
+
+                if(data.response) {
+                    const parsedResponse = marked.parse(data.response);
+                    // 3. AI javobini ekranga chiqarish
+                    const aiHtml = `
+                        <div class="flex justify-start">
+                            <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm bg-white text-gray-800 border border-gray-100 markdown-body">
+                                <div>${parsedResponse}</div>
+                                <span class="text-[10px] block mt-1 text-right text-gray-400">${time}</span>
+                            </div>
+                        </div>
+                    `;
+                    chatContainer.insertBefore(document.createRange().createContextualFragment(aiHtml), typingIndicator);
+                }
+                scrollToBottom();
+            })
+            .catch(err => {
+                typingIndicator.classList.add('hidden');
+                console.error(err);
+            });
+        });
+    </script>
+</body>
+</html>
