@@ -39,6 +39,10 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
+    'https://mygov-assistant.onrender.com',
+])
+
 
 # Application definition
 
@@ -135,7 +139,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'assistant.CustomUser'
-LOGIN_REDIRECT_URL = 'chat'
+LOGIN_REDIRECT_URL = 'chat_new'
 LOGIN_URL = 'login'
 LOGOUT_REDIRECT_URL = 'login'
 

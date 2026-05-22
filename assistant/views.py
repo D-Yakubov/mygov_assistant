@@ -13,14 +13,14 @@ model = genai.GenerativeModel('gemini-3.5-flash')
 
 def register_view(request):
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('chat_new')
     
     if request.method == 'POST':
         form = UserRegisterForm(request.POST)
         if form.is_valid():
             user = form.save()
             login(request, user)
-            return redirect('chat')
+            return redirect('chat_new')
     else:
         form = UserRegisterForm()
     
@@ -35,7 +35,7 @@ class CustomLoginView(LoginView):
     
     def get_success_url(self):
         from django.urls import reverse_lazy
-        return reverse_lazy('chat')
+        return reverse_lazy('chat_new')
     
 def logout_view(request):
     logout(request)
